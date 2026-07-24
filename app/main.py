@@ -12,12 +12,14 @@ app = FastAPI(
 )
 
 
-# Allow frontend applications to access API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
+    allow_origins=[
+        "https://page-pulse-vj8z.vercel.app",
+        "http://localhost:5500"
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -27,6 +29,11 @@ async def root():
     return {
         "message": "Page Pulse API is running"
     }
+
+
+@app.options("/audit")
+async def audit_options():
+    return {}
 
 
 @app.post("/audit")
