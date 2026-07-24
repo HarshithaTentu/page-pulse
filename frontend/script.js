@@ -3,10 +3,10 @@ const API_URL = "https://page-pulse-uajo.onrender.com/audit";
 
 async function auditURL() {
 
-    const input = document.getElementById("urlInput");
+    const urlInput = document.getElementById("urlInput");
     const result = document.getElementById("result");
 
-    const url = input.value.trim();
+    const url = urlInput.value.trim();
 
 
     if (!url) {
@@ -53,12 +53,11 @@ async function auditURL() {
 
     } catch (error) {
 
-        console.error("Audit failed:", error);
+        console.error("API Error:", error);
 
         result.textContent =
             "Unable to connect to Page Pulse API.\n\n" +
             error.message;
 
     }
-
 }
