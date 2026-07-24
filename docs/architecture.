@@ -1,0 +1,478 @@
+# Page Pulse Scalable Architecture
+
+## Overview
+
+Page Pulse is a production URL auditing service designed to handle:
+
+- 10,000 audits per day
+- 500 concurrent request bursts
+- Low latency API responses
+- Reliable background processing
+- Horizontal scalability
+
+The architecture separates the fast API layer from heavy audit processing workloads.
+
+---
+
+# Architecture Diagram
+
+```
+                         Users
+                           |
+                           |
+                    Load Balancer
+                           |
+                           |
+                    FastAPI API Layer
+                           |
+        -------------------------------------
+        |                                   |
+   Rate Limiter                       Authentication
+        |
+        |
+                  Audit Job Queue
+              (Redis Queue / Celery)
+                           |
+        -------------------------------------
+        |                 |                 |
+     Worker 1          Worker 2          Worker N
+        |                 |                 |
+        -------------------------------------
+                           |
+                           |
+                    Audit Engine
+                           |
+          --------------------------------
+          |                              |
+     Redis Cache                 PostgreSQL Database
+    (temporary data)             (audit history)
+
+                           |
+                           |
+              Monitoring & Observability
+          Prometheus + Grafana + Logs
+```
+
+---
+
+# System Components
+
+## 1. Load Balancer
+
+Purpose:
+
+- Distribute incoming traffic across API servers
+- Prevent overload on a single instance
+- Enable horizontal scaling
+
+Example technology:
+
+- AWS Application Load Balancer
+
+---
+
+## 2. API Layer
+
+Technology:
+
+- FastAPI
+
+Responsibilities:
+
+- Receive audit requests
+- Validate URLs
+- Authenticate users
+- Apply rate limits
+- Check cache
+- Create audit jobs
+- Return job IDs
+
+The API layer does not perform expensive crawling directly.
+
+This keeps response times low.
+
+---
+
+## 3. Queue System
+
+Technology:
+
+- Redis Queue / Celery
+
+Purpose:
+
+The queue separates request handling from audit execution.
+
+Responsibilities:
+
+- Store pending audit jobs
+- Handle traffic bursts
+- Provide retry capability
+- Prevent API blocking
+
+Flow:
+
+```
+User Request
+      |
+      |
+   FastAPI
+      |
+      |
+    Queue
+      |
+      |
+   Worker
+```
+
+---
+
+## 4. Worker Services
+
+Workers perform heavy processing:
+
+- Website fetching
+- HTML parsing
+- Performance measurement
+- Security checks
+- SEO checks
+- Audit score generation
+
+Workers scale horizontally:
+
+```
+Worker 1
+Worker 2
+Worker 3
+Worker N
+```
+
+During high traffic, additional workers can be added.
+
+---
+
+## 5. Audit Engine
+
+The audit engine performs:
+
+- HTTP requests
+- Response time measurement
+- Page metadata extraction
+- HTTPS verification
+- Content analysis
+
+Each audit runs independently.
+
+---
+
+## 6. Cache Layer
+
+Technology:
+
+- Redis
+
+Purpose:
+
+Store frequently requested audit results.
+
+Stores:
+
+- Recent audit responses
+- URL audit results
+- Temporary job status
+
+Benefits:
+
+- Faster repeated audits
+- Reduced external requests
+- Lower infrastructure cost
+
+Cache strategy:
+
+- TTL based expiration
+- Configurable cache duration
+
+---
+
+## 7. Database Layer
+
+Technology:
+
+- PostgreSQL
+
+Purpose:
+
+Permanent storage.
+
+Stores:
+
+- Users
+- Audit history
+- Reports
+- Job records
+- Audit timestamps
+
+PostgreSQL acts as the source of truth.
+
+---
+
+# Data Flow
+
+
+## Step 1: User submits audit request
+
+Example:
+
+```
+POST /audit
+
+{
+ "url":"https://example.com"
+}
+```
+
+---
+
+## Step 2: API Validation
+
+The API checks:
+
+- URL format
+- Authentication
+- Rate limits
+- Cache availability
+
+---
+
+## Step 3: Cache Check
+
+If result exists:
+
+```
+Redis Cache
+      |
+      |
+Return existing result
+```
+
+No website request is performed.
+
+---
+
+## Step 4: Job Creation
+
+If cache misses:
+
+A job is created:
+
+```
+{
+ "job_id":"abc123",
+ "url":"https://example.com",
+ "status":"queued"
+}
+```
+
+The job enters the queue.
+
+---
+
+## Step 5: Worker Processing
+
+Worker consumes the job:
+
+1. Fetch webpage
+2. Measure performance
+3. Extract metadata
+4. Generate audit report
+
+---
+
+## Step 6: Store Results
+
+Results are stored in:
+
+Redis:
+
+- Fast temporary access
+
+PostgreSQL:
+
+- Long-term history
+
+---
+
+## Step 7: Client Retrieves Result
+
+Example:
+
+```
+GET /audit/abc123
+```
+
+Response:
+
+```
+{
+ "status":"completed",
+ "score":95
+}
+```
+
+---
+
+# Scaling Strategy
+
+
+## Horizontal Scaling
+
+Instead of increasing one server size, multiple instances are deployed.
+
+API layer:
+
+```
+API Server 1
+API Server 2
+API Server 3
+```
+
+Worker layer:
+
+```
+Worker 1
+Worker 2
+Worker N
+```
+
+Benefits:
+
+- Handles traffic spikes
+- Improves availability
+- Allows independent scaling
+
+---
+
+# State Management
+
+
+## Stateless API Services
+
+API servers do not store local state.
+
+Advantages:
+
+- Easy scaling
+- Simple deployments
+- Better fault tolerance
+- Easy container orchestration
+
+
+## External State Storage
+
+Redis stores:
+
+- Cache
+- Queue data
+- Temporary states
+
+
+PostgreSQL stores:
+
+- Permanent records
+- Audit history
+
+---
+
+# Handling 500 Concurrent Requests
+
+The system handles bursts using:
+
+1. Rate limiting at API layer
+
+2. Queue-based processing
+
+3. Horizontal worker scaling
+
+4. Redis caching
+
+5. Database connection pooling
+
+
+Heavy operations never block incoming API requests.
+
+---
+
+# SLA Design
+
+## API Response SLA
+
+Target:
+
+- Request acknowledgement under 500ms
+
+The API immediately returns a job ID.
+
+---
+
+## Audit Completion SLA
+
+Depends on:
+
+- Target website speed
+- Worker availability
+- Queue length
+
+The system prioritizes:
+
+- Reliability
+- Scalability
+- Predictable processing
+
+over synchronous execution.
+
+---
+
+# Deployment Architecture
+
+Production deployment:
+
+```
+              Internet
+                  |
+                  |
+           Load Balancer
+                  |
+        -------------------
+        |        |        |
+      API-1    API-2    API-3
+                  |
+               Queue
+                  |
+        -------------------
+        |        |        |
+    Worker-1 Worker-2 Worker-N
+                  |
+        -------------------
+        |               |
+      Redis        PostgreSQL
+```
+
+---
+
+# Observability
+
+The system monitors:
+
+- API latency
+- Error rates
+- Request volume
+- Cache hit ratio
+- Queue depth
+- Worker failures
+- Database performance
+
+Monitoring stack:
+
+- Prometheus
+- Grafana
+- Centralized logging
