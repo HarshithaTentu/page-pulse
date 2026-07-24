@@ -1,8 +1,8 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.schemas import AuditRequest
 from app.services import audit_url
-from app.middleware import request_logger
 
 
 app = FastAPI(
@@ -12,14 +12,22 @@ app = FastAPI(
 )
 
 
-# Add request logging middleware
-app.middleware("http")(request_logger)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5500",
+        "https://page-pulse.vercel.app"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/")
 async def root():
     return {
-        "message": "Page Pulse API is running 🚀"
+        "message": "Page Pulse API is running"
     }
 
 
